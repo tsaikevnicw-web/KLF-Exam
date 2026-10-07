@@ -144,111 +144,130 @@ function collectAnswers() {
 }
 
 async function grade() {
-  const answers = collectAnswers();
-  const blank = exam.questions.filter(q => {
-    const a = answers[q.id];
-    return a == null || a === "" || (Array.isArray(a) && a.length === 0);
-  }).length;
-  if (blank && !confirm(`还有 ${blank} 题未作答，确定要交卷评分吗？`)) return;
+  try {
+    const answers = collectAnswers();
+    const blank = exam.questions.filter(q => {
+      const a = answers[q.id];
+      return a == null || a === "" || (Array.isArray(a) && a.length === 0);
+    }).length;
+    if (blank && !confirm(`还有 ${blank} 题未作答，确定要交卷评分吗？`)) return;
 
-  let results = [];
-  if (exam.isStatic && exam._fullPicked) {
-    // 纯静态端评分
-    for (const q of exam._fullPicked) {
-      const given = answers[q.id];
-      if (q.type === "short") {
-        results.push({ id: q.id, answer: q.answer, correct: null });
-      } else if (q.type === "multi") {
-        const isOk = Array.isArray(given) &&
-          given.length === q.answer.length &&
-          [...given].sort().join("") === [...q.answer].sort().join("");
-        results.push({ id: q.id, answer: q.answer, correct: isOk });
-      } else {
-        results.push({ id: q.id, answer: q.answer, correct: given === q.answer });
+    let results = [];
+    if (exam.isStatic || !exam.examId || exam.examId.startsWith("exam_")) {
+      // 纯静态模式评分：直接对照题目标准答案
+      const fullBank = await getQuestionBank();
+      const bankMap = {};
+      fullBank.forEach(q => { bankMap[q.id] = q; });
+
+      for (const q of exam.questions) {
+        const fullQ = bankMap[q.id] || (exam._fullPicked ? exam._fullPicked.find(x => x.id === q.id) : null) || q;
+        const correctAns = fullQ.answer;
+        const given = answers[q.id];
+
+        if (q.type === "short") {
+          results.push({ id: q.id, answer: correctAns || "（请核对标准答案）", correct: null });
+        } else if (q.type === "multi") {
+          const target = Array.isArray(correctAns) ? correctAns : [correctAns];
+          const isOk = Array.isArray(given) &&
+            given.length === target.length &&
+            [...given].sort().join("") === [...target].sort().join("");
+          results.push({ id: q.id, answer: target, correct: isOk });
+        } else {
+          results.push({ id: q.id, answer: correctAns, correct: given === correctAns });
+        }
       }
-    }
-  } else {
-    const res = await fetch("/api/grade", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ examId: exam.examId, answers }),
-    });
-    const data = await res.json();
-    if (data.error) { alert(data.error); return; }
-    results = data.results;
-  }
-
-  form.classList.add("graded");
-  gradeBtn.disabled = true;
-  form.querySelectorAll("input, textarea").forEach(el => el.disabled = true);
-
-  currentResults = results;
-  currentAnswers = answers;
-
-  for (const r of results) {
-    const q = exam.questions.find(x => x.id === r.id);
-    const card = document.getElementById("card-" + r.id);
-    const mark = card.querySelector(".q-mark");
-
-    if (q.type === "short") {
-      const ref = document.createElement("div");
-      ref.className = "ref";
-      ref.textContent = "参考答案：\n" + r.answer;
-      card.appendChild(ref);
-      const sg = document.createElement("div");
-      sg.className = "self-grade";
-      sg.innerHTML = `简答题请对照参考答案自评：
-        <button type="button" data-v="1">答对 +${exam.points}</button>
-        <button type="button" data-v="0">答错</button>`;
-      sg.addEventListener("click", e => {
-        const b = e.target.closest("button"); if (!b) return;
-        selfScore[r.id] = b.dataset.v === "1";
-        sg.querySelectorAll("button").forEach(x => x.className = "");
-        b.className = selfScore[r.id] ? "on-ok" : "on-bad";
-        mark.textContent = selfScore[r.id] ? "✓ 正确" : "✗ 错误";
-        mark.className = "q-mark " + (selfScore[r.id] ? "ok" : "bad");
-        updateScore(results);
-        recordHistory();
-      });
-      card.appendChild(sg);
-      mark.textContent = "待自评";
-      continue;
-    }
-
-    mark.textContent = r.correct ? `✓ +${exam.points}` : "✗ 0";
-    mark.className = "q-mark " + (r.correct ? "ok" : "bad");
-
-    if (!r.correct) {
-      const right = Array.isArray(r.answer) ? r.answer : [r.answer];
-      const given = answers[r.id] == null ? [] : [].concat(answers[r.id]);
-      card.querySelectorAll(".opt").forEach(opt => {
-        const k = opt.dataset.key;
-        if (right.includes(k)) opt.classList.add("correct");
-        else if (given.includes(k)) opt.classList.add("wrong");
-      });
-      if (given.length === 0) {
-        const n = document.createElement("div");
-        n.className = "unanswered";
-        n.textContent = "（未作答）";
-        card.appendChild(n);
-      }
-    }
-  }
-
-  // 解锁 DOCX 下载链接
-  if (docxBanner && downloadDocxLink) {
-    if (exam.isStatic) {
-      downloadDocxLink.href = "KLF_羽绒行业理论考试题库_完整1000题.docx";
-      downloadDocxLink.setAttribute("download", "KLF_羽绒行业理论考试题库_完整1000题.docx");
     } else {
-      downloadDocxLink.href = `/api/download_docx?examId=${encodeURIComponent(exam.examId)}`;
+      const res = await fetch("/api/grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ examId: exam.examId, answers }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      results = data.results;
     }
-    docxBanner.classList.remove("hidden");
-  }
 
-  updateScore(results);
-  recordHistory();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+    form.classList.add("graded");
+    gradeBtn.disabled = true;
+    form.querySelectorAll("input, textarea").forEach(el => el.disabled = true);
+
+    currentResults = results;
+    currentAnswers = answers;
+
+    for (const r of results) {
+      const q = exam.questions.find(x => x.id === r.id);
+      if (!q) continue;
+      const card = document.getElementById("card-" + r.id);
+      if (!card) continue;
+      const mark = card.querySelector(".q-mark");
+
+      if (q.type === "short") {
+        const ref = document.createElement("div");
+        ref.className = "ref";
+        ref.textContent = "参考答案：\n" + r.answer;
+        card.appendChild(ref);
+        const sg = document.createElement("div");
+        sg.className = "self-grade";
+        sg.innerHTML = `简答题请对照参考答案自评：
+          <button type="button" data-v="1">答对 +${exam.points}</button>
+          <button type="button" data-v="0">答错</button>`;
+        sg.addEventListener("click", e => {
+          const b = e.target.closest("button"); if (!b) return;
+          selfScore[r.id] = b.dataset.v === "1";
+          sg.querySelectorAll("button").forEach(x => x.className = "");
+          b.className = selfScore[r.id] ? "on-ok" : "on-bad";
+          if (mark) {
+            mark.textContent = selfScore[r.id] ? "✓ 正确" : "✗ 错误";
+            mark.className = "q-mark " + (selfScore[r.id] ? "ok" : "bad");
+          }
+          updateScore(results);
+          recordHistory();
+        });
+        card.appendChild(sg);
+        if (mark) mark.textContent = "待自评";
+        continue;
+      }
+
+      if (mark) {
+        mark.textContent = r.correct ? `✓ +${exam.points}` : "✗ 0";
+        mark.className = "q-mark " + (r.correct ? "ok" : "bad");
+      }
+
+      if (!r.correct) {
+        const right = Array.isArray(r.answer) ? r.answer : [r.answer];
+        const given = answers[r.id] == null ? [] : [].concat(answers[r.id]);
+        card.querySelectorAll(".opt").forEach(opt => {
+          const k = opt.dataset.key;
+          if (right.includes(k)) opt.classList.add("correct");
+          else if (given.includes(k)) opt.classList.add("wrong");
+        });
+        if (given.length === 0) {
+          const n = document.createElement("div");
+          n.className = "unanswered";
+          n.textContent = "（未作答）";
+          card.appendChild(n);
+        }
+      }
+    }
+
+    // 解锁 DOCX 下载链接
+    if (docxBanner && downloadDocxLink) {
+      if (exam.isStatic || !exam.examId || exam.examId.startsWith("exam_")) {
+        downloadDocxLink.href = "KLF_羽绒行业理论考试题库_完整1000题.docx";
+        downloadDocxLink.setAttribute("download", "KLF_羽绒行业理论考试题库_完整1000题.docx");
+      } else {
+        downloadDocxLink.href = `/api/download_docx?examId=${encodeURIComponent(exam.examId)}`;
+      }
+      docxBanner.classList.remove("hidden");
+    }
+
+    updateScore(results);
+    recordHistory();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (err) {
+    console.error("Grade execution error:", err);
+    alert("评分执行出错：" + (err.message || err));
+  }
 }
 
 function updateScore(results) {
