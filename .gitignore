@@ -1,0 +1,11 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Temporary and local scratch files
+scratch/
+e*.log
+o*.log
+*.log
+
+# Keep questions, docx, code, and web files

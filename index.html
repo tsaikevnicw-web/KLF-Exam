@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>羽绒行业职业技能理论模拟考试</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap header-wrap">
+      <div>
+        <h1>羽绒行业职业技能理论模拟考试</h1>
+        <p class="sub">每次从题库随机抽取 20 题 · 每题 5 分 · 满分 100 分</p>
+      </div>
+      <div class="header-tools">
+        <button id="historyBtn" type="button" class="btn ghost-small">📜 考试记录 (<span id="historyCount">0</span>)</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="docxBanner" class="docx-banner hidden">
+      <div class="docx-info">
+        <span class="docx-icon">📄</span>
+        <div>
+          <strong>已完成评分！标准题库 Word 档已解锁</strong>
+          <p>您可以点击链接下载《KLF_羽绒行业理论考试题库_完整1000题.docx》以核对全套题库与标准答案。</p>
+        </div>
+      </div>
+      <a id="downloadDocxLink" href="#" target="_blank" class="btn primary-small">📥 打开 / 下载题库 Word 档</a>
+    </div>
+
+    <div id="scoreBox" class="score-box hidden"></div>
+    <form id="exam" autocomplete="off"></form>
+    <div class="actions">
+      <button id="gradeBtn" type="button" class="btn primary">评 分</button>
+      <button id="newBtn" type="button" class="btn ghost">重新出卷</button>
+    </div>
+  </main>
+
+  <!-- 考试历史记录弹窗 -->
+  <div id="historyModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>考试历史成绩记录</h2>
+        <button id="closeModalBtn" type="button" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="historyList" class="history-list"></div>
+        <div id="historyDetail" class="history-detail hidden">
+          <button id="backToListBtn" type="button" class="btn-text">← 返回记录列表</button>
+          <div id="detailContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
