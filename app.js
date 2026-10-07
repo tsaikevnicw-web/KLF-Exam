@@ -182,10 +182,10 @@ async function grade() {
   gradeBtn.disabled = true;
   form.querySelectorAll("input, textarea").forEach(el => el.disabled = true);
 
-  currentResults = data.results;
+  currentResults = results;
   currentAnswers = answers;
 
-  for (const r of data.results) {
+  for (const r of results) {
     const q = exam.questions.find(x => x.id === r.id);
     const card = document.getElementById("card-" + r.id);
     const mark = card.querySelector(".q-mark");
@@ -207,7 +207,7 @@ async function grade() {
         b.className = selfScore[r.id] ? "on-ok" : "on-bad";
         mark.textContent = selfScore[r.id] ? "✓ 正确" : "✗ 错误";
         mark.className = "q-mark " + (selfScore[r.id] ? "ok" : "bad");
-        updateScore(data.results);
+        updateScore(results);
         recordHistory();
       });
       card.appendChild(sg);
