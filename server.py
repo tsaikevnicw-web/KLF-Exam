@@ -26,6 +26,14 @@ def public(q):
     return {k: v for k, v in q.items() if k not in ("answer",)}
 
 
+TYPE_LIMITS = {
+    "single": 500,
+    "multi": 240,
+    "judge": 230,
+    "short": 30,
+}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(ROOT / "static"), **kw)
@@ -44,10 +52,40 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/api/exam"):
-            picked = random.sample(QUESTIONS, min(EXAM_SIZE, len(QUESTIONS)))
+            import urllib.parse
+            query = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(query)
+            q_type = params.get("type", ["mixed"])[0]
+            start_no = params.get("from", [""])[0]
+            end_no = params.get("to", [""])[0]
+
+            pool = QUESTIONS
+            if q_type in TYPE_LIMITS:
+                pool = [q for q in QUESTIONS if q.get("type") == q_type]
+                max_limit = TYPE_LIMITS[q_type]
+                try:
+                    s = int(start_no) if start_no else 1
+                except ValueError:
+                    s = 1
+                try:
+                    e = int(end_no) if end_no else max_limit
+                except ValueError:
+                    e = max_limit
+                if s > e:
+                    s, e = e, s
+                s = max(1, s)
+                e = min(max_limit, e)
+                pool = [q for q in pool if s <= q.get("no", 0) <= e]
+
+            if not pool:
+                return self._json({"error": "选定题型及范围内没有找到题目，请调整范围后重试"}, 400)
+
+            sample_size = min(EXAM_SIZE, len(pool))
+            picked = random.sample(pool, sample_size)
             exam_id = secrets.token_hex(8)
             EXAMS[exam_id] = [q["id"] for q in picked]
             return self._json({"examId": exam_id, "points": POINTS,
+                               "totalPool": len(pool),
                                "questions": [public(q) for q in picked]})
 
         if self.path.startswith("/api/download_docx"):

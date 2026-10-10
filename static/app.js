@@ -1,4 +1,11 @@
 const TYPE_NAME = { single: "单选题", multi: "多选题", judge: "判断题", short: "简答题" };
+const TYPE_LIMITS = {
+  single: { name: "单选题", max: 500, defaultTo: 100 },
+  multi: { name: "多选题", max: 240, defaultTo: 100 },
+  judge: { name: "判断题", max: 230, defaultTo: 100 },
+  short: { name: "简答题", max: 30, defaultTo: 30 },
+};
+
 const form = document.getElementById("exam");
 const gradeBtn = document.getElementById("gradeBtn");
 const newBtn = document.getElementById("newBtn");
@@ -13,6 +20,16 @@ const historyList = document.getElementById("historyList");
 const historyDetail = document.getElementById("historyDetail");
 const backToListBtn = document.getElementById("backToListBtn");
 const detailContent = document.getElementById("detailContent");
+
+// 出题配置 DOM
+const typeSelect = document.getElementById("typeSelect");
+const rangeGroup = document.getElementById("rangeGroup");
+const rangeFrom = document.getElementById("rangeFrom");
+const rangeTo = document.getElementById("rangeTo");
+const rangeLimitHint = document.getElementById("rangeLimitHint");
+const generateBtn = document.getElementById("generateBtn");
+const configSummary = document.getElementById("configSummary");
+const topSubTitle = document.getElementById("topSubTitle");
 
 let exam = null;        // {examId, points, questions}
 let selfScore = {};     // 简答题自评: id -> true/false
@@ -60,7 +77,94 @@ async function getQuestionBank() {
   }
 }
 
-async function loadExam() {
+function onTypeChange() {
+  const type = typeSelect ? typeSelect.value : "mixed";
+  if (type === "mixed" || !TYPE_LIMITS[type]) {
+    if (rangeGroup) rangeGroup.classList.add("hidden");
+    if (configSummary) {
+      configSummary.innerHTML = `当前题型：<strong>混合题型</strong> · 从 1000 题全套题库中随机抽取 20 题`;
+    }
+  } else {
+    const cfg = TYPE_LIMITS[type];
+    if (rangeGroup) rangeGroup.classList.remove("hidden");
+    if (rangeFrom) {
+      rangeFrom.min = 1;
+      rangeFrom.max = cfg.max;
+      rangeFrom.value = 1;
+    }
+    if (rangeTo) {
+      rangeTo.min = 1;
+      rangeTo.max = cfg.max;
+      rangeTo.value = Math.min(cfg.defaultTo, cfg.max);
+    }
+    if (rangeLimitHint) {
+      rangeLimitHint.textContent = `（上限 ${cfg.max} 题）`;
+    }
+    if (configSummary) {
+      configSummary.innerHTML = `当前题型：<strong>${cfg.name}</strong> · 设定范围第 <strong>1 ~ ${rangeTo.value}</strong> 题 (上限 ${cfg.max} 题)`;
+    }
+  }
+}
+
+function getCurrentExamSettings() {
+  const type = typeSelect ? typeSelect.value : "mixed";
+  if (type === "mixed" || !TYPE_LIMITS[type]) {
+    return { type: "mixed", from: null, to: null };
+  }
+  const cfg = TYPE_LIMITS[type];
+  let from = parseInt(rangeFrom ? rangeFrom.value : 1, 10);
+  let to = parseInt(rangeTo ? rangeTo.value : cfg.max, 10);
+  if (isNaN(from) || from < 1) from = 1;
+  if (isNaN(to) || to > cfg.max) to = cfg.max;
+  if (from > to) {
+    [from, to] = [to, from];
+  }
+  if (rangeFrom) rangeFrom.value = from;
+  if (rangeTo) rangeTo.value = to;
+  return { type, from, to };
+}
+
+function hasAnsweredAny() {
+  if (!exam || !exam.questions) return false;
+  const answers = collectAnswers();
+  return Object.values(answers).some(a => {
+    if (Array.isArray(a)) return a.length > 0;
+    return a !== null && a !== "";
+  });
+}
+
+function updateExamSummaries() {
+  if (!exam || !exam.questions) return;
+  const count = exam.questions.length;
+  const pts = exam.points || 5;
+  const totalPts = count * pts;
+
+  if (!exam.examType || exam.examType === "mixed") {
+    if (topSubTitle) {
+      topSubTitle.textContent = `混合题型 · 从全套题库随机抽取 ${count} 题 · 每题 ${pts} 分 · 满分 ${totalPts} 分`;
+    }
+    if (configSummary) {
+      configSummary.innerHTML = `当前题型：<strong>混合题型</strong> · 从 1000 题全套题库中随机抽取 <strong>${count}</strong> 题 · 满分 <strong>${totalPts}</strong> 分`;
+    }
+  } else {
+    const typeName = TYPE_LIMITS[exam.examType]?.name || exam.examType;
+    if (topSubTitle) {
+      topSubTitle.textContent = `${typeName} · 从题库第 ${exam.rangeFrom || 1} ~ ${exam.rangeTo || TYPE_LIMITS[exam.examType]?.max} 题中抽取 ${count} 题 · 每题 ${pts} 分 · 满分 ${totalPts} 分`;
+    }
+    if (configSummary) {
+      configSummary.innerHTML = `当前题型：<strong>${typeName}</strong> · 范围第 <strong>${exam.rangeFrom || 1} ~ ${exam.rangeTo || TYPE_LIMITS[exam.examType]?.max}</strong> 题 (题库共 ${exam.totalPool || count} 题) · 抽取 <strong>${count}</strong> 题 · 满分 <strong>${totalPts}</strong> 分`;
+    }
+  }
+}
+
+async function loadExam(type = null, from = null, to = null) {
+  if (type === null) {
+    const s = getCurrentExamSettings();
+    type = s.type;
+    from = s.from;
+    to = s.to;
+  }
+
   scoreBox.classList.add("hidden");
   if (docxBanner) docxBanner.classList.add("hidden");
   form.classList.remove("graded");
@@ -71,32 +175,63 @@ async function loadExam() {
   form.innerHTML = '<div class="card">出卷中…</div>';
 
   try {
-    // 优先尝试本地后端 API
-    const res = await fetch("/api/exam", { cache: "no-store" });
+    const params = new URLSearchParams();
+    if (type && type !== "mixed") {
+      params.set("type", type);
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+    }
+    const url = "/api/exam" + (params.toString() ? "?" + params.toString() : "");
+    const res = await fetch(url, { cache: "no-store" });
     if (res.ok) {
       exam = await res.json();
     } else {
-      throw new Error("API not available, fallback to static mode");
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || "API 出卷异常");
     }
   } catch (e) {
-    // GitHub Pages 纯静态模式：直接从 questions.json 随机抽取 20 题
+    if (e.message && !e.message.includes("API") && !e.message.includes("fetch")) {
+      alert("出卷提示：" + e.message);
+      form.innerHTML = `<div class="card" style="color:var(--bad)">出卷提示：${esc(e.message)}</div>`;
+      return;
+    }
+    // GitHub Pages 纯静态模式 fallback
     const bank = await getQuestionBank();
-    const shuffled = [...bank].sort(() => 0.5 - Math.random());
-    const picked = shuffled.slice(0, 20);
+    let pool = bank;
+    if (type && type in TYPE_LIMITS) {
+      pool = bank.filter(q => q.type === type);
+      const s = Math.max(1, from || 1);
+      const e = Math.min(TYPE_LIMITS[type].max, to || TYPE_LIMITS[type].max);
+      pool = pool.filter(q => q.no >= s && q.no <= e);
+    }
+    if (!pool.length) {
+      alert("选定题型及范围内没有找到题目，请调整范围后重试！");
+      form.innerHTML = '<div class="card" style="color:var(--bad)">选定题型及范围内没有找到题目，请调整范围后重试</div>';
+      return;
+    }
+    const sampleSize = Math.min(20, pool.length);
+    const shuffled = [...pool].sort(() => 0.5 - Math.random());
+    const picked = shuffled.slice(0, sampleSize);
     const examId = "exam_" + Math.random().toString(36).substring(2, 10);
     exam = {
       examId: examId,
       points: 5,
+      totalPool: pool.length,
       isStatic: true,
       questions: picked.map(q => {
         const copy = Object.assign({}, q);
         delete copy.answer;
         return copy;
       }),
-      _fullPicked: picked // 仅本地評分用
+      _fullPicked: picked
     };
   }
 
+  exam.examType = type;
+  exam.rangeFrom = from;
+  exam.rangeTo = to;
+
+  updateExamSummaries();
   render();
   window.scrollTo({ top: 0 });
 }
@@ -115,11 +250,13 @@ function render() {
           <span>${esc(o.text)}</span>
         </label>`).join("");
     }
+    const bankInfo = q.no ? `<span class="q-source-no" title="题库原序号">(题库第 ${q.no} 题)</span>` : "";
     return `
       <div class="card" id="card-${q.id}">
         <div class="q-head">
           <span class="q-no">${i + 1}.</span>
           <span class="q-type">${TYPE_NAME[q.type]}</span>
+          ${bankInfo}
           <span class="q-text">${esc(q.text)}</span>
           <span class="q-mark"></span>
         </div>
@@ -441,11 +578,29 @@ historyModal.addEventListener("click", (e) => {
 });
 
 gradeBtn.addEventListener("click", grade);
+
+if (typeSelect) {
+  typeSelect.addEventListener("change", onTypeChange);
+}
+
+if (generateBtn) {
+  generateBtn.addEventListener("click", () => {
+    if (!form.classList.contains("graded") && hasAnsweredAny() && !confirm("当前考卷尚未交卷评分，确定要重新出题吗？")) {
+      return;
+    }
+    const s = getCurrentExamSettings();
+    loadExam(s.type, s.from, s.to);
+  });
+}
+
 newBtn.addEventListener("click", () => {
-  if (!form.classList.contains("graded") && !confirm("确定放弃本卷并重新出卷吗？")) return;
-  loadExam();
+  if (!form.classList.contains("graded") && hasAnsweredAny() && !confirm("确定放弃本卷并重新出卷吗？")) return;
+  const s = getCurrentExamSettings();
+  loadExam(s.type, s.from, s.to);
 });
 
 updateHistoryCount();
+onTypeChange();
 loadExam();
+
 

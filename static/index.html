@@ -11,7 +11,7 @@
     <div class="wrap header-wrap">
       <div>
         <h1>羽绒行业职业技能理论模拟考试</h1>
-        <p class="sub">每次从题库随机抽取 20 题 · 每题 5 分 · 满分 100 分</p>
+        <p class="sub" id="topSubTitle">每次从题库随机抽取 20 题 · 每题 5 分 · 满分 100 分</p>
       </div>
       <div class="header-tools">
         <button id="historyBtn" type="button" class="btn ghost-small">📜 考试记录 (<span id="historyCount">0</span>)</button>
@@ -20,6 +20,41 @@
   </header>
 
   <main class="wrap">
+    <!-- 出题设置控制区 -->
+    <div class="card config-card">
+      <div class="config-row">
+        <div class="config-field">
+          <label for="typeSelect" class="config-label">题目类型：</label>
+          <select id="typeSelect" class="config-select">
+            <option value="mixed" selected>混合题型 (预设)</option>
+            <option value="single">单选题 (上限500题)</option>
+            <option value="multi">多选题 (上限240题)</option>
+            <option value="judge">判断题 (上限230题)</option>
+            <option value="short">简答题 (上限30题)</option>
+          </select>
+        </div>
+
+        <div id="rangeGroup" class="config-field range-group hidden">
+          <label class="config-label">出题范围：</label>
+          <div class="range-inputs">
+            <span class="range-text">第</span>
+            <input type="number" id="rangeFrom" min="1" max="500" value="1" class="config-input range-num" placeholder="起始">
+            <span class="range-sep">~</span>
+            <input type="number" id="rangeTo" min="1" max="500" value="100" class="config-input range-num" placeholder="结束">
+            <span class="range-text">题</span>
+            <span id="rangeLimitHint" class="range-hint">（上限 500 题）</span>
+          </div>
+        </div>
+
+        <div class="config-field config-action">
+          <button id="generateBtn" type="button" class="btn primary-accent">🎯 出 题</button>
+        </div>
+      </div>
+      <div id="configSummary" class="config-summary">
+        <span>当前题型：<strong>混合题型</strong> · 从 1000 题全套题库中随机抽取 20 题</span>
+      </div>
+    </div>
+
     <div id="docxBanner" class="docx-banner hidden">
       <div class="docx-info">
         <span class="docx-icon">📄</span>
@@ -56,6 +91,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261007_01"></script>
+  <script src="app.js?v=20261010_02"></script>
 </body>
 </html>
